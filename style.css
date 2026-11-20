@@ -95,4 +95,10 @@ dialog h3 { font-size: .9rem; margin: 12px 0 4px; color: var(--muted); }
 .day-list li.none { color: var(--muted); font-size: .9rem; }
 #day-dialog { width: min(94vw, 460px); }
 #day-dialog .buttons { margin-top: 16px; justify-content: flex-end; }
-@media (max-width: 560px) { .cal-day { min-height: 56px; font-size: .62rem; padding: 3px; } .card { padding: 14px; } }
+@media (max-width: 560px) {
+  header, main { padding-left: 8px; padding-right: 8px; }
+  .card { padding: 14px 10px; }
+  .cal-head, .cal-body { gap: 2px; }
+  .cal-day { min-height: 60px; font-size: .56rem; padding: 2px; letter-spacing: -.03em; }
+  .cal-day .tag { padding: 0 1px; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+}
