@@ -24,6 +24,9 @@ function load(key, fallback) {
   try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch { return fallback; }
 }
 const save = (key, value) => localStorage.setItem(key, JSON.stringify(value));
+// 金額などの入力を 0〜上限の有限な数にそろえる
+const MAX_AMOUNT = 1e9;
+const clampNum = (v, max = MAX_AMOUNT) => Math.min(max, Math.max(0, Number(v) || 0));
 
 // kind: 'records'（勤務記録） / 'shifts'（シフト予定）
 const store = { records: [], shifts: [] };
@@ -344,7 +347,7 @@ function renderGoal(actual, forecast) {
   $('goal-bar').setAttribute('aria-label', text);
 }
 $('goal-input').addEventListener('input', (ev) => {
-  prefs.goal = Math.max(0, Math.round(Number(ev.target.value) || 0));
+  prefs.goal = Math.round(clampNum(ev.target.value));
   save(KEYS.prefs, prefs);
   renderMonth();
 });
@@ -452,7 +455,10 @@ function renderHistory() {
 }
 
 // ---- 年収チェックと収入計画 ----
-const manYen = (n) => (n >= 10000 ? `${(n / 10000).toFixed(1)}万` : n > 0 ? yen(n) : '');
+// 棒グラフの金額。long は広い画面用、short は狭い画面用（万円単位に丸める）
+const oku = (n) => `${Math.round(n / 1e8).toLocaleString('ja-JP')}億`;
+const manYen = (n) => (n >= 1e8 ? oku(n) : n >= 1000000 ? `${Math.round(n / 10000).toLocaleString('ja-JP')}万` : n >= 10000 ? `${(n / 10000).toFixed(1)}万` : n > 0 ? yen(n) : '');
+const manShort = (n) => (n >= 1e8 ? oku(n) : n >= 5000 ? `${Math.round(n / 10000).toLocaleString('ja-JP')}万` : n > 0 ? '1万未満' : '');
 const limitText = (w) => `${yen(w.amount)}${w.under ? '未満' : '以下'}`;
 
 function renderYear() {
@@ -470,7 +476,10 @@ function renderYear() {
     b.type = 'button';
     if (m.key === current) b.className = 'current';
     const val = document.createElement('span');
-    val.className = 'val'; val.textContent = manYen(sum(m));
+    val.className = 'val';
+    const long = document.createElement('span'); long.className = 'long'; long.textContent = manYen(sum(m));
+    const short = document.createElement('span'); short.className = 'short'; short.textContent = manShort(sum(m));
+    val.append(long, short);
     const stack = document.createElement('span');
     stack.className = 'stack'; stack.style.height = `${(sum(m) / max) * 78}%`;
     for (const [cls, v] of [['rec', m.actualGross], ['pend', m.pendingGross], ['plan', m.planned]]) {
@@ -536,7 +545,7 @@ function renderYear() {
   }));
   $('walls-label').textContent = set.label
     ? `${set.label}で比べています。`
-    : `${viewYear}年の基準額には対応していません（令和7年分以降に対応）。`;
+    : `${viewYear}年の基準額には対応していません（令和7年分〜令和9年分に対応）。`;
 }
 $('year-prev').addEventListener('click', () => { viewYear -= 1; renderYear(); });
 $('year-next').addEventListener('click', () => { viewYear += 1; renderYear(); });
@@ -545,7 +554,7 @@ $('profile-select').addEventListener('change', (ev) => {
 });
 for (const [id, key] of [['plan-input', 'planMonthly'], ['limit-input', 'yearLimit']]) {
   $(id).addEventListener('input', (ev) => {
-    prefs[key] = Math.max(0, Math.round(Number(ev.target.value) || 0));
+    prefs[key] = Math.round(clampNum(ev.target.value));
     save(KEYS.prefs, prefs); renderYear();
   });
 }
@@ -661,7 +670,7 @@ settingsForm.addEventListener('input', (ev) => {
   const w = editWp();
   if (el.type === 'checkbox') w[el.name] = el.checked;
   else if (el.name === 'payday') w.payday = Math.min(31, Math.max(0, Math.round(Number(el.value) || 0)));
-  else if (el.type === 'number') w[el.name] = Math.max(0, Number(el.value) || 0);
+  else if (el.type === 'number') w[el.name] = clampNum(el.value);
   else if (el.name === 'name') w.name = el.value.trim() || '勤務先';
   else w[el.name] = el.value;
   save(KEYS.workplaces, workplaces);

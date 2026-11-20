@@ -138,6 +138,7 @@ test('年収の基準額', () => {
   assert.deepEqual(amounts(2026, 'none'), [1780000]);
   assert.deepEqual(amounts(2025, 'dependent'), [1600000, 1230000, 1300000]);
   assert.deepEqual(wallsFor(2024, 'none').walls, []);
+  assert.deepEqual(wallsFor(2028, 'none').walls, []);
   const [self, , social] = wallsFor(2026, 'dependent').walls;
   const st = (w, a, f) => { const r = wallStatus(w, { tax: a, social: a }, { tax: f, social: f }); return [r.state, r.remaining]; };
   assert.deepEqual(st(self, 1000000, 1780000), ['ok', 0]);

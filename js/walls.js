@@ -40,14 +40,14 @@ const SOCIAL_WALLS = [
 ];
 
 const SETS = [
-  { from: 2026, label: '令和8年分・令和9年分の基準',
+  { from: 2026, to: 2027, label: '令和8年分・令和9年分の基準',
     walls: [...taxWalls({ self: man(178), dep: man(136), studentFull: man(159), studentEnd: man(197), spouseFull: man(169), spouseEnd: man(207) }), ...SOCIAL_WALLS] },
-  { from: 2025, label: '令和7年分の基準',
+  { from: 2025, to: 2025, label: '令和7年分の基準',
     walls: [...taxWalls({ self: man(160), dep: man(123), studentFull: man(150), studentEnd: man(188), spouseFull: man(160), spouseEnd: 2016000, spouseEndUnder: true }), ...SOCIAL_WALLS] },
 ];
 
 export function wallsFor(year, profile) {
-  const set = SETS.find((s) => year >= s.from);
+  const set = SETS.find((s) => year >= s.from && year <= s.to);
   if (!set) return { label: null, walls: [] };
   return { label: set.label, walls: set.walls.filter((w) => w.profiles.includes(profile)) };
 }
