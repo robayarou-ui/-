@@ -3,10 +3,12 @@ import {
   earningsHistory, pendingShifts, buildShift, shiftTemplates, yearPlan,
 } from './calc.js';
 import { PROFILES, wallsFor, wallStatus } from './walls.js';
+import { makeBackup, parseBackup } from './backup.js';
+import { dueNotifications } from './notify.js';
 
 const KEYS = {
   records: 'kyuryo.records', shifts: 'kyuryo.shifts', settings: 'kyuryo.settings',
-  workplaces: 'kyuryo.workplaces', prefs: 'kyuryo.prefs', timer: 'kyuryo.timer',
+  workplaces: 'kyuryo.workplaces', prefs: 'kyuryo.prefs', timer: 'kyuryo.timer', notified: 'kyuryo.notified',
 };
 const $ = (id) => document.getElementById(id);
 const yen = (n) => '¥' + Math.round(n).toLocaleString('ja-JP');
@@ -52,7 +54,12 @@ function loadState() {
   store.records = load(KEYS.records, []);
   store.shifts = load(KEYS.shifts, []);
   timer = load(KEYS.timer, null);
-  prefs = { goal: 0, editWp: null, timerWp: null, profile: 'student', planMonthly: 0, yearLimit: 0, ...load(KEYS.prefs, {}) };
+  prefs = { goal: 0, editWp: null, timerWp: null, profile: 'student', planMonthly: 0, yearLimit: 0,
+    notifyShift: false, notifyLeadMin: 60, notifyPayday: false, ...load(KEYS.prefs, {}),
+  };
+  for (const k of ['goal', 'planMonthly', 'yearLimit']) prefs[k] = Math.round(clampNum(prefs[k]));
+  prefs.notifyLeadMin = Math.round(clampNum(prefs.notifyLeadMin, 1440));
+  if (!PROFILES.some((p) => p.id === prefs.profile)) prefs.profile = 'student';
   workplaces = load(KEYS.workplaces, []);
   if (!workplaces.length) {
     // 勤務先が1つだった頃の設定を引き継ぐ
@@ -710,11 +717,139 @@ $('wp-delete').addEventListener('click', () => {
   renderAll();
 });
 
+// ---- 通知 ----
+const SENT_LIMIT = 200;
+const canNotify = () => 'Notification' in window;
+
+async function showNotification(title, body, tag) {
+  const options = { body, tag, icon: 'icons/icon-192.png' };
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    if (reg) { await reg.showNotification(title, options); return; }
+  } catch { /* 下の方法で出す */ }
+  new Notification(title, options);
+}
+
+function checkNotifications() {
+  if (!canNotify() || Notification.permission !== 'granted') return;
+  const sentList = load(KEYS.notified, []);
+  const due = dueNotifications({
+    shifts: store.shifts, workplaces, prefs, now: Date.now(), sent: new Set(sentList),
+  });
+  if (!due.length) return;
+  for (const n of due) { sentList.push(n.key); showNotification(n.title, n.body, n.key); }
+  save(KEYS.notified, sentList.slice(-SENT_LIMIT));
+}
+
+function renderNotify() {
+  const on = prefs.notifyShift || prefs.notifyPayday;
+  $('notify-shift').checked = !!prefs.notifyShift;
+  $('notify-payday').checked = !!prefs.notifyPayday;
+  if (document.activeElement !== $('notify-lead')) $('notify-lead').value = prefs.notifyLeadMin;
+  $('notify-lead').closest('label').hidden = !prefs.notifyShift;
+  $('notify-test').disabled = !canNotify();
+  $('notify-status').textContent = !canNotify()
+    ? 'このブラウザは通知に対応していません。iPhoneはホーム画面に追加してから開くと使える場合があります。'
+    : Notification.permission === 'denied'
+      ? '通知がブロックされています。ブラウザの設定でこのサイトの通知を許可してください。'
+      : on
+        ? '通知は、このアプリ（ページ）を開いている間だけ届きます。閉じていると届きません。'
+        : '';
+}
+
+async function ensurePermission() {
+  if (!canNotify()) return false;
+  if (Notification.permission === 'default') await Notification.requestPermission();
+  return Notification.permission === 'granted';
+}
+
+for (const [id, key] of [['notify-shift', 'notifyShift'], ['notify-payday', 'notifyPayday']]) {
+  $(id).addEventListener('change', async (ev) => {
+    prefs[key] = ev.target.checked && await ensurePermission();
+    save(KEYS.prefs, prefs);
+    renderNotify(); checkNotifications();
+  });
+}
+$('notify-lead').addEventListener('input', (ev) => {
+  prefs.notifyLeadMin = Math.round(clampNum(ev.target.value, 1440));
+  save(KEYS.prefs, prefs);
+});
+$('notify-test').addEventListener('click', async () => {
+  if (await ensurePermission()) showNotification('給料タイマー', 'テスト通知です。', 'test');
+  renderNotify();
+});
+
+// ---- バックアップ ----
+$('backup-export').addEventListener('click', () => {
+  const backup = makeBackup({ records: store.records, shifts: store.shifts, workplaces, prefs });
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `kyuryo-backup-${dayKey(Date.now())}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  $('backup-status').textContent = `バックアップを書き出しました（勤務記録 ${store.records.length}件、シフト ${store.shifts.length}件）。`;
+});
+$('backup-import').addEventListener('click', () => $('backup-file').click());
+$('backup-file').addEventListener('change', async (ev) => {
+  const file = ev.target.files[0];
+  ev.target.value = '';
+  if (!file) return;
+  if (timer) {
+    $('backup-status').textContent = '計測中は復元できません。先に退勤するか、計測を取り消してください。';
+    return;
+  }
+  let data;
+  try { data = parseBackup(await file.text()); } catch (e) {
+    $('backup-status').textContent = `復元できませんでした: ${e.message}`;
+    return;
+  }
+  const msg = `バックアップから復元しますか？\n今のデータ（勤務記録 ${store.records.length}件、シフト ${store.shifts.length}件）は、`
+    + `バックアップの内容（勤務記録 ${data.records.length}件、シフト ${data.shifts.length}件、勤務先 ${data.workplaces.length}件）に置き換わります。`;
+  if (!confirm(msg)) return;
+  // 途中で保存に失敗したら元のデータに戻す
+  const targets = ['records', 'shifts', 'workplaces', 'prefs'];
+  const before = targets.map((k) => localStorage.getItem(KEYS[k]));
+  try {
+    for (const k of targets) save(KEYS[k], data[k]);
+  } catch {
+    targets.forEach((k, i) => {
+      if (before[i] === null) localStorage.removeItem(KEYS[k]); else localStorage.setItem(KEYS[k], before[i]);
+    });
+    $('backup-status').textContent = '復元できませんでした: ブラウザの保存容量が足りません。データは変更していません。';
+    return;
+  }
+  bulk = null;
+  document.activeElement?.blur?.();
+  loadState();
+  renderAll();
+  $('backup-status').textContent = `復元しました（勤務記録 ${data.records.length}件、シフト ${data.shifts.length}件、勤務先 ${data.workplaces.length}件）。`;
+});
+
+// ---- アプリとして使う（オフライン対応とインストール） ----
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (ev) => {
+  ev.preventDefault();
+  installPrompt = ev;
+  $('install-btn').hidden = false;
+});
+$('install-btn').addEventListener('click', async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt = null;
+  $('install-btn').hidden = true;
+});
+
+
 function renderAll() {
-  fillSettings(); renderCalendar(); renderMonth(); renderYear(); renderHistory(); renderDayDialog(); renderTimer();
+  fillSettings(); renderCalendar(); renderMonth(); renderYear(); renderHistory(); renderDayDialog(); renderTimer(); renderNotify();
 }
 
 loadState();
 renderAll();
 setInterval(renderTimer, 1000);
+checkNotifications();
+setInterval(checkNotifications, 30000);
 window.addEventListener('storage', () => { loadState(); renderAll(); });

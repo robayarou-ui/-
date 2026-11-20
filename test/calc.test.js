@@ -147,3 +147,41 @@ test('年収の基準額', () => {
   assert.deepEqual(st(social, 1299999, 1299999), ['ok', 0]);
   assert.deepEqual(st(social, 1200000, 1300000), ['warn', -1]);
 });
+
+test('バックアップの書き出しと読み込み', async () => {
+  const { makeBackup, parseBackup } = await import('../js/backup.js');
+  const W = [{ id: 'a', name: '店', color: '#123456', payday: 25, ...S }];
+  const rec = { id: 'r1', workplaceId: 'a', start: at('2026-11-02T09:00'), end: at('2026-11-02T17:00'), breakMin: 30 };
+  const data = { records: [rec], shifts: [], workplaces: W, prefs: { goal: 5 } };
+  assert.deepEqual(parseBackup(JSON.stringify(makeBackup(data))), data);
+  const bad = (d) => () => parseBackup(JSON.stringify({ app: 'kyuryo-timer', data: d }));
+  assert.throws(() => parseBackup('x'));
+  assert.throws(() => parseBackup('{"app":"other","data":{}}'));
+  assert.throws(bad({ workplaces: [] }));
+  assert.throws(bad({ workplaces: W, records: [{ ...rec, workplaceId: 'zzz' }] }));
+  assert.throws(bad({ workplaces: W, records: [{ ...rec, start: 'x' }] }));
+  const fixed = parseBackup(JSON.stringify({ app: 'kyuryo-timer', data: { workplaces: [{ id: 'a', hourlyWage: -5, commutePerDay: 1e308, taxColumn: 'zz', color: 'red' }] } }));
+  assert.equal(fixed.workplaces[0].commutePerDay, 0);
+  assert.equal(fixed.workplaces[0].hourlyWage, DEFAULT_SETTINGS.hourlyWage);
+  assert.equal(fixed.workplaces[0].taxColumn, 'kou');
+  assert.equal(fixed.workplaces[0].color, '#1f6feb');
+});
+
+test('通知のタイミング', async () => {
+  const { dueNotifications } = await import('../js/notify.js');
+  const W = [{ id: 'a', name: '店', payday: 31 }];
+  const shift = { id: 's1', workplaceId: 'a', start: at('2026-11-20T18:00'), end: at('2026-11-20T22:00') };
+  const run = (now, prefs, sent = new Set()) => dueNotifications({ shifts: [shift], workplaces: W, prefs, now: at(now), sent });
+  const P = { notifyShift: true, notifyLeadMin: 60, notifyPayday: true };
+  assert.deepEqual(run('2026-11-20T16:59', P), []);
+  const due = run('2026-11-20T17:00', P);
+  assert.equal(due.length, 1);
+  assert.equal(due[0].body, '18:00〜22:00（あと60分）');
+  assert.deepEqual(run('2026-11-20T17:30', P, new Set([due[0].key])), []);
+  assert.deepEqual(run('2026-11-20T18:00', P), []);
+  assert.deepEqual(run('2026-11-20T17:30', { ...P, notifyShift: false }), []);
+  assert.deepEqual(run('2026-11-30T08:59', P), []);
+  assert.deepEqual(run('2026-11-30T09:00', P).map((n) => n.title), ['今日は給料日です']);
+  assert.deepEqual(run('2026-11-29T12:00', P), []);
+  assert.deepEqual(run('2026-11-30T12:00', { ...P, notifyPayday: false }), []);
+});

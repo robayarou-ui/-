@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>給料タイマー</title>
+<meta name="theme-color" content="#1f6feb">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -194,6 +198,34 @@
       <li>「これまでの稼ぎ」は現在の設定（時給や保険など）で全期間を計算し直した金額です。</li>
       <li>データはこのブラウザの中だけに保存されます。</li>
     </ul>
+  </section>
+  <section class="card" aria-labelledby="app-h">
+    <h2 id="app-h">通知・バックアップ・アプリ</h2>
+    <div class="settings">
+      <fieldset>
+        <legend>通知</legend>
+        <label class="check"><input type="checkbox" id="notify-shift">シフトの前に通知する</label>
+        <label>何分前に通知するか<input type="number" id="notify-lead" min="0" max="1440" step="5" inputmode="numeric"></label>
+        <label class="check"><input type="checkbox" id="notify-payday">給料日に通知する（9時以降）</label>
+        <div><button type="button" id="notify-test">テスト通知を送る</button></div>
+        <p id="notify-status" class="muted wide" role="status"></p>
+      </fieldset>
+      <fieldset>
+        <legend>バックアップ</legend>
+        <p class="muted wide">勤務記録・シフト・勤務先・設定をファイルに保存できます。機種変更やブラウザのデータ消去に備えて、ときどき書き出してください。</p>
+        <div class="buttons wide">
+          <button type="button" id="backup-export">バックアップを書き出す</button>
+          <button type="button" id="backup-import">バックアップから復元する</button>
+          <input type="file" id="backup-file" accept="application/json,.json" hidden>
+        </div>
+        <p id="backup-status" class="muted wide" role="status"></p>
+      </fieldset>
+      <fieldset>
+        <legend>アプリとして使う</legend>
+        <p class="muted wide">ホーム画面に追加すると、アプリのように起動でき、電波がなくても使えます。iPhoneは共有ボタンから「ホーム画面に追加」、Androidはブラウザのメニューから「アプリをインストール」または「ホーム画面に追加」を選んでください。</p>
+        <div class="wide"><button type="button" id="install-btn" hidden>このアプリをインストール</button></div>
+      </fieldset>
+    </div>
   </section>
 </main>
 
