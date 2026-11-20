@@ -73,6 +73,8 @@ const byStart = (a, b) => a.start - b.start;
 const inMonth = (kind) => store[kind].filter((r) => monthKey(r.start) === viewMonth).sort(byStart);
 const onDay = (kind, key) => store[kind].filter((r) => dayKey(r.start) === key).sort(byStart);
 const withName = (r, text) => (multi() ? `${wpOf(r).name} ${text}` : text);
+// シフトの型（開始・終了が HH:MM）の表示。休憩が違う型を見分けられるようにする。
+const templateLabel = (t) => withName(t, `${t.start}〜${t.end}${t.breakMin ? ` 休憩${t.breakMin}分` : ''}`);
 
 function fillWpSelect(select, value) {
   select.replaceChildren(...workplaces.map((w) => new Option(w.name, w.id)));
@@ -117,7 +119,7 @@ function renderTemplates(container, onPick) {
   container.replaceChildren(...list.map((t) => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.textContent = withName(t, `${t.start}〜${t.end}`);
+    b.textContent = templateLabel(t);
     b.addEventListener('click', () => onPick(t));
     return b;
   }));
@@ -245,14 +247,15 @@ function renderCalendar() {
   body.classList.toggle('bulk-on', !!bulk);
   if (bulk) {
     $('bulk-text').textContent =
-      `まとめて追加中: ${withName(bulk, `${bulk.start}〜${bulk.end}`)}。追加する日を押してください（もう一度押すと取り消し）。`;
+      `まとめて追加中: ${templateLabel(bulk)}。追加する日を押してください（もう一度押すと取り消し）。`;
   }
 }
 
 // ---- まとめて追加 ----
 function toggleBulkDay(key) {
   const same = onDay('shifts', key).find((s) =>
-    s.workplaceId === bulk.workplaceId && timeOf(s.start) === bulk.start && timeOf(s.end) === bulk.end);
+    s.workplaceId === bulk.workplaceId && timeOf(s.start) === bulk.start && timeOf(s.end) === bulk.end
+    && s.breakMin === bulk.breakMin);
   if (same) {
     store.shifts = store.shifts.filter((s) => s.id !== same.id);
     save(KEYS.shifts, store.shifts);

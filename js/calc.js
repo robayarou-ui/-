@@ -206,6 +206,8 @@ export function shiftTemplates(items, limit = 6) {
   const map = new Map();
   for (const r of items) {
     const t = { workplaceId: r.workplaceId, start: hhmm(r.start), end: hhmm(r.end), breakMin: r.breakMin || 0 };
+    // 開始と終了が同じ時刻の型は、追加すると24時間の勤務になるので除く
+    if (t.start === t.end) continue;
     const k = `${t.workplaceId || ''}|${t.start}|${t.end}|${t.breakMin}`;
     const cur = map.get(k) || { ...t, count: 0, last: 0 };
     cur.count += 1; cur.last = Math.max(cur.last, r.start);

@@ -109,4 +109,6 @@ test('シフトの組み立てと型', () => {
   const mk = (d, s, e, w = 'a') => ({ workplaceId: w, ...buildShift(d, s, e, 60) });
   const t = shiftTemplates([mk('2026-11-01', '09:00', '18:00'), mk('2026-11-02', '17:00', '22:00'), mk('2026-11-03', '09:00', '18:00'), mk('2026-11-04', '09:00', '18:00', 'b')]);
   assert.deepEqual(t.map((x) => [x.workplaceId, x.start, x.end, x.count]), [['a', '09:00', '18:00', 2], ['b', '09:00', '18:00', 1], ['a', '17:00', '22:00', 1]]);
+  const zero = { workplaceId: 'a', start: at('2026-11-05T17:36:10'), end: at('2026-11-05T17:36:40'), breakMin: 0 };
+  assert.deepEqual(shiftTemplates([zero]), []);
 });
