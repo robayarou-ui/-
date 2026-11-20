@@ -153,14 +153,69 @@ export function monthlySummary(records, settings) {
   };
 }
 
-// 記録のない日のシフト予定だけを残す（見込み計算用）
+export const WORKPLACE_COLORS = ['#1f6feb', '#12805c', '#c2410c', '#9333ea', '#be185d', '#0e7490'];
+
+export const settingsFor = (record, workplaces) =>
+  workplaces.find((w) => w.id === record.workplaceId) || workplaces[0] || DEFAULT_SETTINGS;
+
+const SUM_FIELDS = [
+  'shifts', 'worked', 'night', 'overtime', 'base', 'nightPay', 'overtimePay', 'wage', 'commute', 'gross',
+  'health', 'pension', 'employment', 'social', 'incomeTax', 'residentTax', 'deductions', 'net',
+];
+
+// 勤務先ごとに monthlySummary を計算して合算する。税や保険は勤務先ごとの設定で計算。
+export function combinedSummary(records, workplaces) {
+  const groups = new Map();
+  for (const r of records) {
+    const w = settingsFor(r, workplaces);
+    if (!groups.has(w)) groups.set(w, []);
+    groups.get(w).push(r);
+  }
+  const parts = [...groups].map(([workplace, recs]) => ({ workplace, ...monthlySummary(recs, workplace) }));
+  const total = Object.fromEntries(SUM_FIELDS.map((f) => [f, 0]));
+  for (const p of parts) for (const f of SUM_FIELDS) total[f] += p[f];
+  total.days = new Set(records.map((r) => dayKey(r.start))).size;
+  return { ...total, parts };
+}
+
+// 同じ日・同じ勤務先に勤務記録がまだないシフト予定だけを残す（見込み計算用）
 export function pendingShifts(shifts, records) {
-  const done = new Set(records.map((r) => dayKey(r.start)));
-  return shifts.filter((s) => !done.has(dayKey(s.start)));
+  const key = (r) => `${r.workplaceId || ''}|${dayKey(r.start)}`;
+  const done = new Set(records.map(key));
+  return shifts.filter((s) => !done.has(key(s)));
+}
+
+const hhmm = (ms) => {
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+// 日付(YYYY-MM-DD)と時刻(HH:MM)から勤務を作る。終了が開始以前なら翌日扱い。不正なら null。
+export function buildShift(day, startHM, endHM, breakMin = 0) {
+  const start = new Date(`${day}T${startHM}`).getTime();
+  let end = new Date(`${day}T${endHM}`).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  if (end <= start) { const d = new Date(end); d.setDate(d.getDate() + 1); end = d.getTime(); }
+  const b = Math.round(Number(breakMin));
+  if (!(b >= 0) || b * MIN >= end - start) return null;
+  return { start, end, breakMin: b };
+}
+
+// よく使うシフトの型（勤務先・開始・終了・休憩）を回数の多い順に返す
+export function shiftTemplates(items, limit = 6) {
+  const map = new Map();
+  for (const r of items) {
+    const t = { workplaceId: r.workplaceId, start: hhmm(r.start), end: hhmm(r.end), breakMin: r.breakMin || 0 };
+    const k = `${t.workplaceId || ''}|${t.start}|${t.end}|${t.breakMin}`;
+    const cur = map.get(k) || { ...t, count: 0, last: 0 };
+    cur.count += 1; cur.last = Math.max(cur.last, r.start);
+    map.set(k, cur);
+  }
+  return [...map.values()].sort((a, b) => b.count - a.count || b.last - a.last).slice(0, limit);
 }
 
 // これまでの稼ぎ: 月別・年別・累計
-export function earningsHistory(records, settings) {
+export function earningsHistory(records, workplaces) {
   const byMonth = new Map();
   for (const r of records) {
     const k = monthKey(r.start);
@@ -170,7 +225,7 @@ export function earningsHistory(records, settings) {
   const fields = ['days', 'worked', 'gross', 'deductions', 'net'];
   const zero = () => Object.fromEntries(fields.map((f) => [f, 0]));
   const add = (a, b) => { for (const f of fields) a[f] += b[f]; };
-  const months = [...byMonth.keys()].sort().reverse().map((key) => ({ key, ...monthlySummary(byMonth.get(key), settings) }));
+  const months = [...byMonth.keys()].sort().reverse().map((key) => ({ key, ...combinedSummary(byMonth.get(key), workplaces) }));
   const total = zero();
   const years = new Map();
   for (const m of months) {

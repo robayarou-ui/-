@@ -17,6 +17,7 @@
     <p id="timer-status" class="status">未出勤</p>
     <p id="timer-clock" class="clock" aria-live="off">0:00:00</p>
     <p id="timer-detail" class="muted"></p>
+    <label id="timer-wp-label" class="inline">勤務先<select id="timer-wp"></select></label>
     <div class="buttons">
       <button id="btn-start" class="primary">出勤</button>
       <button id="btn-break">休憩開始</button>
@@ -31,11 +32,16 @@
       <h2 id="month-h"></h2>
       <button id="month-next" aria-label="次の月">›</button>
     </div>
+    <div id="bulk-bar" class="bulk-bar" hidden>
+      <span id="bulk-text"></span>
+      <button id="bulk-done" class="primary small">完了</button>
+    </div>
     <div class="calendar" role="grid" aria-label="カレンダー">
       <div class="cal-head" role="row"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
       <div id="cal-body" class="cal-body"></div>
     </div>
     <p class="legend muted"><span class="dot rec"></span>勤務した日 <span class="dot shift"></span>シフト予定 ／ 日付を押すと確認・修正できます。</p>
+    <div class="buttons cal-actions"><button id="btn-bulk">シフトをまとめて追加</button></div>
     <div class="net">
       <span>手取り（概算）</span>
       <strong id="sum-net">¥0</strong>
@@ -52,6 +58,17 @@
     </div>
     <p id="sum-hours" class="muted"></p>
     <p id="sum-forecast" class="muted"></p>
+    <div class="table-wrap">
+      <table class="records history" id="sum-parts-table">
+        <thead><tr><th>勤務先</th><th>実働</th><th>支給額</th><th>手取り</th></tr></thead>
+        <tbody id="sum-parts"></tbody>
+      </table>
+    </div>
+    <div class="goal">
+      <label class="inline">月の目標（支給額・円）<input type="number" id="goal-input" min="0" step="1000" inputmode="numeric"></label>
+      <div id="goal-bar" class="goal-bar" role="img"><span id="goal-actual"></span><span id="goal-pending"></span></div>
+      <p id="goal-text" class="muted"></p>
+    </div>
   </section>
 
   <section class="card" aria-labelledby="rec-h">
@@ -64,8 +81,8 @@
       </div>
     </div>
     <div class="table-wrap">
-      <table class="records">
-        <thead><tr><th>日付</th><th>開始</th><th>終了</th><th>休憩</th><th>実働</th><th>支給額</th><th></th></tr></thead>
+      <table class="records" id="records-table">
+        <thead><tr><th>日付</th><th class="wp-col">勤務先</th><th>開始</th><th>終了</th><th>休憩</th><th>実働</th><th>支給額</th><th></th></tr></thead>
         <tbody id="records"></tbody>
       </table>
     </div>
@@ -90,7 +107,18 @@
 
   <section class="card" aria-labelledby="set-h">
     <h2 id="set-h">設定</h2>
+    <div class="wp-bar">
+      <label class="inline">設定する勤務先<select id="wp-select"></select></label>
+      <button id="wp-add">勤務先を追加</button>
+      <button id="wp-delete" class="ghost">この勤務先を削除</button>
+    </div>
     <form id="settings" class="settings">
+      <fieldset>
+        <legend>勤務先</legend>
+        <label>名前<input type="text" name="name" maxlength="30" autocomplete="off"></label>
+        <label>カレンダーの色<input type="color" name="color"></label>
+        <label>給料日（毎月何日・0で表示しない）<input type="number" name="payday" min="0" max="31" step="1" inputmode="numeric"></label>
+      </fieldset>
       <fieldset>
         <legend>給料</legend>
         <label>時給（円）<input type="number" name="hourlyWage" min="0" step="1" inputmode="numeric"></label>
@@ -131,7 +159,8 @@
       <li>雇用保険料率の初期値は令和8年度の一般の事業（本人負担 0.5%）です。</li>
       <li>健康保険・厚生年金の「料率で概算」は支給額に料率を掛けた目安です。正確な額は標準報酬月額で決まるので、給与明細の金額が分かる場合は「毎月の金額を入力する」を使ってください。</li>
       <li>交通費は非課税として扱います。休憩は深夜以外の時間から先に差し引きます。</li>
-      <li>シフト予定は、その日に勤務記録がまだない分だけ「見込み」に含めます。</li>
+      <li>時給、税、保険の設定は勤務先ごとです。掛け持ち先は「乙欄」を選ぶと、その勤務先の分だけ乙欄で計算します。</li>
+      <li>シフト予定は、同じ日・同じ勤務先に勤務記録がまだない分だけ「見込み」に含めます。</li>
       <li>「これまでの稼ぎ」は現在の設定（時給や保険など）で全期間を計算し直した金額です。</li>
       <li>データはこのブラウザの中だけに保存されます。</li>
     </ul>
@@ -144,6 +173,8 @@
   <ul id="day-records" class="day-list"></ul>
   <h3>シフト予定</h3>
   <ul id="day-shifts" class="day-list"></ul>
+  <h3 id="day-templates-h">よく使うシフトをワンタップで追加</h3>
+  <div id="day-templates" class="chips"></div>
   <div class="buttons">
     <button id="day-add-record">勤務記録を追加</button>
     <button id="day-add-shift">シフトを追加</button>
@@ -154,7 +185,9 @@
 <dialog id="edit-dialog">
   <form method="dialog" id="edit-form">
     <h2 id="edit-title">勤務記録</h2>
-    <label>日付<input type="date" name="date" required></label>
+    <div id="edit-templates" class="chips"></div>
+    <label id="edit-wp-label">勤務先<select name="workplaceId"></select></label>
+    <label id="edit-date-label">日付<input type="date" name="date"></label>
     <label>開始<input type="time" name="start" required></label>
     <label>終了<input type="time" name="end" required></label>
     <label>休憩（分）<input type="number" name="breakMin" min="0" step="1" value="0" inputmode="numeric" required></label>
@@ -162,7 +195,7 @@
     <p id="edit-error" class="error" role="alert"></p>
     <div class="buttons">
       <button type="button" id="edit-cancel">キャンセル</button>
-      <button type="submit" class="primary">保存</button>
+      <button type="submit" class="primary" id="edit-submit">保存</button>
     </div>
   </form>
 </dialog>

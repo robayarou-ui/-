@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { withholdingTax, shiftPay, nightMinutes, roundInsurance, monthlySummary, earningsHistory, pendingShifts, DEFAULT_SETTINGS } from '../js/calc.js';
+import { withholdingTax, shiftPay, nightMinutes, roundInsurance, monthlySummary, earningsHistory, pendingShifts, combinedSummary, buildShift, shiftTemplates, DEFAULT_SETTINGS } from '../js/calc.js';
 
 const at = (s) => new Date(s).getTime();
 const S = { ...DEFAULT_SETTINGS, hourlyWage: 1200 };
@@ -72,7 +72,7 @@ test('月の集計', () => {
 
 test('これまでの稼ぎ', () => {
   const rec = (d) => ({ start: at(`${d}T09:00`), end: at(`${d}T17:00`), breakMin: 0 });
-  const h = earningsHistory([rec('2025-12-10'), rec('2026-01-05'), rec('2026-01-06'), rec('2026-02-01')], S);
+  const h = earningsHistory([rec('2025-12-10'), rec('2026-01-05'), rec('2026-01-06'), rec('2026-02-01')], [{ id: 'a', ...S }]);
   assert.deepEqual(h.months.map((m) => m.key), ['2026-02', '2026-01', '2025-12']);
   assert.deepEqual(h.years.map((y) => [y.year, y.gross, y.days]), [['2026', 28800, 3], ['2025', 9600, 1]]);
   assert.equal(h.total.gross, 38400);
@@ -80,8 +80,33 @@ test('これまでの稼ぎ', () => {
   assert.equal(h.total.worked, 1920);
 });
 
-test('記録のある日のシフトは見込みから外す', () => {
-  const a = { start: at('2026-11-20T09:00'), end: at('2026-11-20T17:00'), breakMin: 0 };
-  const b = { start: at('2026-11-21T09:00'), end: at('2026-11-21T17:00'), breakMin: 0 };
-  assert.deepEqual(pendingShifts([a, b], [a]), [b]);
+test('記録のある日・同じ勤務先のシフトは見込みから外す', () => {
+  const mk = (d, w) => ({ workplaceId: w, start: at(`${d}T09:00`), end: at(`${d}T17:00`), breakMin: 0 });
+  const rec = mk('2026-11-20', 'a');
+  const other = mk('2026-11-20', 'b');
+  const later = mk('2026-11-21', 'a');
+  assert.deepEqual(pendingShifts([mk('2026-11-20', 'a'), other, later], [rec]), [other, later]);
+});
+
+test('勤務先ごとの設定で計算して合算する', () => {
+  const A = { id: 'a', ...S, hourlyWage: 1000, taxColumn: 'kou' };
+  const B = { id: 'b', ...S, hourlyWage: 1500, taxColumn: 'otsu', commutePerDay: 300 };
+  const mk = (d, w) => ({ workplaceId: w, start: at(`${d}T09:00`), end: at(`${d}T17:00`), breakMin: 0 });
+  const c = combinedSummary([mk('2026-11-02', 'a'), mk('2026-11-03', 'b'), mk('2026-11-04', 'b'), { ...mk('2026-11-05'), workplaceId: 'gone' }], [A, B]);
+  assert.equal(c.parts.length, 2);
+  assert.equal(c.wage, 16000 + 24000);
+  assert.equal(c.commute, 600);
+  assert.equal(c.incomeTax, Math.floor(24000 * 0.03063));
+  assert.equal(c.net, c.gross - c.incomeTax);
+  assert.equal(c.days, 4);
+});
+
+test('シフトの組み立てと型', () => {
+  const n = buildShift('2026-11-20', '22:00', '05:00', 60);
+  assert.equal(n.end - n.start, 7 * 3600000);
+  assert.equal(buildShift('2026-11-20', '09:00', '10:00', 60), null);
+  assert.equal(buildShift('2026-11-20', '', '10:00', 0), null);
+  const mk = (d, s, e, w = 'a') => ({ workplaceId: w, ...buildShift(d, s, e, 60) });
+  const t = shiftTemplates([mk('2026-11-01', '09:00', '18:00'), mk('2026-11-02', '17:00', '22:00'), mk('2026-11-03', '09:00', '18:00'), mk('2026-11-04', '09:00', '18:00', 'b')]);
+  assert.deepEqual(t.map((x) => [x.workplaceId, x.start, x.end, x.count]), [['a', '09:00', '18:00', 2], ['b', '09:00', '18:00', 1], ['a', '17:00', '22:00', 1]]);
 });
