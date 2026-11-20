@@ -89,6 +89,35 @@
     <p id="records-empty" class="muted">この月の記録はまだありません。</p>
   </section>
 
+  <section class="card" aria-labelledby="year-h">
+    <div class="month-nav">
+      <button id="year-prev" aria-label="前の年">‹</button>
+      <h2 id="year-h"></h2>
+      <button id="year-next" aria-label="次の年">›</button>
+    </div>
+    <div class="totals">
+      <div><span>この年の実績（支給額）</span><strong id="year-actual">¥0</strong></div>
+      <div><span>シフト予定を含む見込み</span><strong id="year-forecast">¥0</strong></div>
+      <div><span>計画も含む年間見込み</span><strong id="year-total">¥0</strong></div>
+    </div>
+    <div id="year-chart" class="chart"></div>
+    <p class="legend muted"><span class="dot rec"></span>実績 <span class="dot pend"></span>シフト予定 <span class="dot plan"></span>計画 ／ 月を押すとその月を表示します。</p>
+    <label class="inline">収入計画: 予定のない先の月の見込み（月額・円）<input type="number" id="plan-input" min="0" step="1000" inputmode="numeric"></label>
+    <h3 class="sub">年収の基準額チェック</h3>
+    <div class="wall-inputs">
+      <label class="inline">あなたの状況<select id="profile-select"></select></label>
+      <label class="inline">自分で決めた年間の上限（円・任意）<input type="number" id="limit-input" min="0" step="10000" inputmode="numeric"></label>
+    </div>
+    <ul id="walls" class="walls"></ul>
+    <p id="walls-label" class="muted"></p>
+    <ul class="notes muted">
+      <li>給与収入だけの場合の目安です。このアプリに記録していない収入は含みません。所得税などの基準は交通費を除いた金額、社会保険の扶養は交通費を含めた金額で比べています。</li>
+      <li>社会保険の扶養は、今後の年間収入の見込みで判定され、加入している健康保険によって扱いが異なります。</li>
+      <li>月額8.8万円（年収約106万円）の賃金要件は令和8年10月に撤廃とされています。週20時間以上働くなどの条件を満たすと、年収にかかわらず勤務先の社会保険に加入します。</li>
+      <li>住民税は市区町村ごとに基準が異なり、所得税より低い収入からかかることがあります。</li>
+    </ul>
+  </section>
+
   <section class="card" aria-labelledby="hist-h">
     <h2 id="hist-h">これまでの稼ぎ</h2>
     <div class="totals">

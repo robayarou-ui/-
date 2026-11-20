@@ -238,3 +238,33 @@ export function earningsHistory(records, workplaces) {
   }
   return { months, years: [...years.values()], total };
 }
+
+// 1年分の月別の実績・シフト予定・計画。planMonthly は、今月より先で記録もシフトもない月に入れる見込み額。
+export function yearPlan(records, shifts, workplaces, year, nowMs, planMonthly = 0) {
+  const current = monthKey(nowMs);
+  const months = [];
+  const total = { actualGross: 0, actualWage: 0, pendingGross: 0, pendingWage: 0, planned: 0, worked: 0 };
+  for (let m = 1; m <= 12; m++) {
+    const key = `${year}-${String(m).padStart(2, '0')}`;
+    const recs = records.filter((r) => monthKey(r.start) === key);
+    const pend = pendingShifts(shifts.filter((s) => monthKey(s.start) === key), recs);
+    const a = combinedSummary(recs, workplaces);
+    const f = pend.length ? combinedSummary([...recs, ...pend], workplaces) : a;
+    const empty = recs.length === 0 && pend.length === 0;
+    const row = {
+      key, month: m, actualGross: a.gross, actualWage: a.wage, worked: a.worked,
+      pendingGross: f.gross - a.gross, pendingWage: f.wage - a.wage,
+      planned: empty && key > current ? Math.max(0, Math.round(planMonthly || 0)) : 0,
+    };
+    months.push(row);
+    for (const k of Object.keys(total)) total[k] += row[k];
+  }
+  return {
+    months, ...total,
+    actual: { tax: total.actualWage, social: total.actualGross },
+    forecast: {
+      tax: total.actualWage + total.pendingWage + total.planned,
+      social: total.actualGross + total.pendingGross + total.planned,
+    },
+  };
+}
