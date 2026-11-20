@@ -160,3 +160,32 @@ export function monthlySummary(records, settings) {
     incomeTax, residentTax, deductions, net: t.gross - deductions,
   };
 }
+
+// 記録のない日のシフト予定だけを残す（見込み計算用）
+export function pendingShifts(shifts, records) {
+  const done = new Set(records.map((r) => dayKey(r.start)));
+  return shifts.filter((s) => !done.has(dayKey(s.start)));
+}
+
+// これまでの稼ぎ: 月別・年別・累計
+export function earningsHistory(records, settings) {
+  const byMonth = new Map();
+  for (const r of records) {
+    const k = monthKey(r.start);
+    if (!byMonth.has(k)) byMonth.set(k, []);
+    byMonth.get(k).push(r);
+  }
+  const fields = ['days', 'worked', 'gross', 'deductions', 'net'];
+  const zero = () => Object.fromEntries(fields.map((f) => [f, 0]));
+  const add = (a, b) => { for (const f of fields) a[f] += b[f]; };
+  const months = [...byMonth.keys()].sort().reverse().map((key) => ({ key, ...monthlySummary(byMonth.get(key), settings) }));
+  const total = zero();
+  const years = new Map();
+  for (const m of months) {
+    const y = m.key.slice(0, 4);
+    if (!years.has(y)) years.set(y, { year: y, ...zero(), months: [] });
+    add(years.get(y), m); years.get(y).months.push(m);
+    add(total, m);
+  }
+  return { months, years: [...years.values()], total };
+}

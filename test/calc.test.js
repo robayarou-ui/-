@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { withholdingTax, shiftPay, nightMinutes, roundInsurance, monthlySummary, DEFAULT_SETTINGS } from '../js/calc.js';
+import { withholdingTax, shiftPay, nightMinutes, roundInsurance, monthlySummary, earningsHistory, pendingShifts, DEFAULT_SETTINGS } from '../js/calc.js';
 
 const at = (s) => new Date(s).getTime();
 const S = { ...DEFAULT_SETTINGS, hourlyWage: 1200 };
@@ -106,4 +106,20 @@ test('月の残業は同じ日の勤務時間を合算する', () => {
   assert.equal(summary.overtime, shift.overtime);
   assert.equal(summary.overtimePay, shift.overtimePay);
   assert.equal(summary.wage, shift.pay);
+});
+
+test('これまでの稼ぎ', () => {
+  const rec = (d) => ({ start: at(`${d}T09:00`), end: at(`${d}T17:00`), breakMin: 0 });
+  const h = earningsHistory([rec('2025-12-10'), rec('2026-01-05'), rec('2026-01-06'), rec('2026-02-01')], S);
+  assert.deepEqual(h.months.map((m) => m.key), ['2026-02', '2026-01', '2025-12']);
+  assert.deepEqual(h.years.map((y) => [y.year, y.gross, y.days]), [['2026', 28800, 3], ['2025', 9600, 1]]);
+  assert.equal(h.total.gross, 38400);
+  assert.equal(h.total.net, 38400);
+  assert.equal(h.total.worked, 1920);
+});
+
+test('記録のある日のシフトは見込みから外す', () => {
+  const a = { start: at('2026-11-20T09:00'), end: at('2026-11-20T17:00'), breakMin: 0 };
+  const b = { start: at('2026-11-21T09:00'), end: at('2026-11-21T17:00'), breakMin: 0 };
+  assert.deepEqual(pendingShifts([a, b], [a]), [b]);
 });
