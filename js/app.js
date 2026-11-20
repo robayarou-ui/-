@@ -1,8 +1,8 @@
 import { DEFAULT_SETTINGS, shiftPay, monthlySummary, monthKey } from './calc.js';
+import { yen, netNote } from './format.js';
 
 const KEYS = { records: 'kyuryo.records', settings: 'kyuryo.settings', timer: 'kyuryo.timer' };
 const $ = (id) => document.getElementById(id);
-const yen = (n) => '¥' + Math.round(n).toLocaleString('ja-JP');
 const pad = (n) => String(n).padStart(2, '0');
 const hm = (min) => `${Math.floor(min / 60)}時間${pad(min % 60)}分`;
 const timeOf = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -99,6 +99,8 @@ function renderMonth() {
   const list = monthRecords();
   const s = monthlySummary(list, settings);
   $('sum-net').textContent = yen(s.net);
+  $('sum-net-box').classList.toggle('negative', s.net < 0);
+  $('sum-net-note').textContent = netNote(s);
 
   const pay = $('sum-pay'); pay.replaceChildren();
   row(pay, '基本給', yen(s.base));
