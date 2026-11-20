@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { withholdingTax, shiftPay, nightMinutes, roundInsurance, monthlySummary, earningsHistory, pendingShifts, combinedSummary, buildShift, shiftTemplates, DEFAULT_SETTINGS } from '../js/calc.js';
+import { wallsFor, wallStatus } from '../js/walls.js';
+import { withholdingTax, shiftPay, nightMinutes, roundInsurance, monthlySummary, earningsHistory, pendingShifts, combinedSummary, buildShift, shiftTemplates, yearPlan, DEFAULT_SETTINGS } from '../js/calc.js';
 
 const at = (s) => new Date(s).getTime();
 const S = { ...DEFAULT_SETTINGS, hourlyWage: 1200 };
@@ -111,4 +112,38 @@ test('シフトの組み立てと型', () => {
   assert.deepEqual(t.map((x) => [x.workplaceId, x.start, x.end, x.count]), [['a', '09:00', '18:00', 2], ['b', '09:00', '18:00', 1], ['a', '17:00', '22:00', 1]]);
   const zero = { workplaceId: 'a', start: at('2026-11-05T17:36:10'), end: at('2026-11-05T17:36:40'), breakMin: 0 };
   assert.deepEqual(shiftTemplates([zero]), []);
+});
+
+test('年間の実績・予定・計画', () => {
+  const W = [{ id: 'a', ...S, hourlyWage: 1000, commutePerDay: 500 }];
+  const mk = (d) => ({ workplaceId: 'a', start: at(`${d}T09:00`), end: at(`${d}T17:00`), breakMin: 0 });
+  const y = yearPlan([mk('2026-01-10'), mk('2026-11-02'), mk('2025-12-31')], [mk('2026-11-02'), mk('2026-11-25'), mk('2026-12-05')], W, 2026, at('2026-11-20T12:00'), 50000);
+  assert.equal(y.months[0].actualGross, 8500);
+  assert.equal(y.months[10].actualWage, 8000);
+  assert.equal(y.months[10].pendingGross, 8500);
+  assert.equal(y.months[11].pendingWage, 8000);
+  assert.equal(y.planned, 0);
+  assert.deepEqual(y.actual, { tax: 16000, social: 17000 });
+  assert.deepEqual(y.forecast, { tax: 32000, social: 34000 });
+  const p = yearPlan([mk('2026-01-10')], [], W, 2026, at('2026-10-20T12:00'), 50000);
+  assert.deepEqual(p.months.map((m) => m.planned), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50000, 50000]);
+  assert.equal(p.forecast.tax, 108000);
+});
+
+test('年収の基準額', () => {
+  const amounts = (y, p) => wallsFor(y, p).walls.map((w) => w.amount);
+  assert.deepEqual(amounts(2026, 'student'), [1780000, 1590000, 1970000, 1500000]);
+  assert.deepEqual(amounts(2026, 'dependent'), [1780000, 1360000, 1300000]);
+  assert.deepEqual(amounts(2027, 'spouse'), [1780000, 1690000, 2070000, 1300000]);
+  assert.deepEqual(amounts(2026, 'none'), [1780000]);
+  assert.deepEqual(amounts(2025, 'dependent'), [1600000, 1230000, 1300000]);
+  assert.deepEqual(wallsFor(2024, 'none').walls, []);
+  assert.deepEqual(wallsFor(2028, 'none').walls, []);
+  const [self, , social] = wallsFor(2026, 'dependent').walls;
+  const st = (w, a, f) => { const r = wallStatus(w, { tax: a, social: a }, { tax: f, social: f }); return [r.state, r.remaining]; };
+  assert.deepEqual(st(self, 1000000, 1780000), ['ok', 0]);
+  assert.deepEqual(st(self, 1000000, 1780001), ['warn', -1]);
+  assert.deepEqual(st(self, 1780001, 1900000), ['over', -120000]);
+  assert.deepEqual(st(social, 1299999, 1299999), ['ok', 0]);
+  assert.deepEqual(st(social, 1200000, 1300000), ['warn', -1]);
 });

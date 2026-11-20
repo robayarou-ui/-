@@ -104,7 +104,8 @@ dialog h3 { font-size: .9rem; margin: 12px 0 4px; color: var(--muted); }
 }
 
 label.inline { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-label.inline select, label.inline input { width: auto; min-width: 120px; }
+label.inline { max-width: 100%; }
+label.inline select, label.inline input { width: auto; min-width: 120px; max-width: 100%; }
 #timer-wp-label { margin-bottom: 12px; justify-content: center; }
 input[type=text] { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); width: 100%; }
 input[type=color] { width: 56px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
@@ -129,3 +130,39 @@ input[type=color] { width: 56px; height: 36px; padding: 2px; border: 1px solid v
 #goal-pending { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--accent) 70%, transparent) 0 6px, color-mix(in srgb, var(--accent) 35%, transparent) 6px 12px); }
 #goal-text { margin: 0; }
 #sum-parts-table { margin-top: 12px; }
+
+.chart { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; align-items: end; height: 180px; margin: 4px 0 6px; }
+.chart button { display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; height: 100%; padding: 0; border: 0; background: none; border-radius: 6px; font-size: .68rem; color: var(--muted); min-width: 0; }
+.chart .val { text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
+.chart .val .short { display: none; }
+.chart .stack { display: flex; flex-direction: column-reverse; border-radius: 4px 4px 0 0; overflow: hidden; min-height: 2px; background: color-mix(in srgb, var(--text) 10%, transparent); }
+.chart .seg.rec, .dot.rec { background: var(--good); }
+.chart .seg.pend, .dot.pend { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--accent) 75%, transparent) 0 5px, color-mix(in srgb, var(--accent) 40%, transparent) 5px 10px); }
+.chart .seg.plan, .dot.plan { background: color-mix(in srgb, var(--muted) 45%, transparent); }
+.chart .mon { text-align: center; padding-top: 2px; }
+.chart button.current .mon { color: var(--accent); font-weight: 700; }
+h3.sub { font-size: 1rem; margin: 20px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+.wall-inputs { display: flex; flex-wrap: wrap; gap: 10px 20px; margin-bottom: 12px; }
+.walls { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.walls li { border: 1px solid var(--line); border-left-width: 5px; border-radius: 10px; padding: 10px 12px; }
+.walls li.ok { border-left-color: var(--good); }
+.walls li.warn { border-left-color: #d97706; }
+.walls li.over { border-left-color: var(--danger); }
+.walls .head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-weight: 600; }
+.walls .state { margin: 4px 0 0; }
+.walls li.warn .state { color: #b45309; }
+.walls li.over .state { color: var(--danger); }
+@media (prefers-color-scheme: dark) { .walls li.warn .state { color: #fbbf24; } }
+.walls .effect { margin: 2px 0 0; font-size: .85rem; color: var(--muted); }
+.walls .goal-bar { margin: 8px 0 4px; height: 10px; }
+.walls .goal-bar .a { background: var(--good); }
+.walls li.over .goal-bar .a { background: var(--danger); }
+.walls .goal-bar .f { background: color-mix(in srgb, var(--accent) 55%, transparent); }
+.walls li.warn .goal-bar .f { background: #d97706; }
+#walls-label { margin: 8px 0 0; }
+@media (max-width: 560px) {
+  .chart { gap: 2px; }
+  .chart button { font-size: .56rem; letter-spacing: -.03em; }
+  .chart .val .long { display: none; }
+  .chart .val .short { display: inline; }
+}

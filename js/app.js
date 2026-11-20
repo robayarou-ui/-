@@ -1,7 +1,8 @@
 import {
   DEFAULT_SETTINGS, WORKPLACE_COLORS, shiftPay, settingsFor, combinedSummary, monthKey, dayKey,
-  earningsHistory, pendingShifts, buildShift, shiftTemplates,
+  earningsHistory, pendingShifts, buildShift, shiftTemplates, yearPlan,
 } from './calc.js';
+import { PROFILES, wallsFor, wallStatus } from './walls.js';
 
 const KEYS = {
   records: 'kyuryo.records', shifts: 'kyuryo.shifts', settings: 'kyuryo.settings',
@@ -23,6 +24,9 @@ function load(key, fallback) {
   try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch { return fallback; }
 }
 const save = (key, value) => localStorage.setItem(key, JSON.stringify(value));
+// 金額などの入力を 0〜上限の有限な数にそろえる
+const MAX_AMOUNT = 1e9;
+const clampNum = (v, max = MAX_AMOUNT) => Math.min(max, Math.max(0, Number(v) || 0));
 
 // kind: 'records'（勤務記録） / 'shifts'（シフト予定）
 const store = { records: [], shifts: [] };
@@ -31,6 +35,7 @@ let workplaces = [];
 let prefs = {};
 let timer = null; // { start, breakMs, breakStart, workplaceId }
 let viewMonth = monthKey(Date.now());
+let viewYear = new Date().getFullYear();
 let editing = { kind: 'records', id: null };
 let openDay = null;
 let bulk = null; // { workplaceId, start, end, breakMin }
@@ -47,7 +52,7 @@ function loadState() {
   store.records = load(KEYS.records, []);
   store.shifts = load(KEYS.shifts, []);
   timer = load(KEYS.timer, null);
-  prefs = { goal: 0, editWp: null, timerWp: null, ...load(KEYS.prefs, {}) };
+  prefs = { goal: 0, editWp: null, timerWp: null, profile: 'student', planMonthly: 0, yearLimit: 0, ...load(KEYS.prefs, {}) };
   workplaces = load(KEYS.workplaces, []);
   if (!workplaces.length) {
     // 勤務先が1つだった頃の設定を引き継ぐ
@@ -342,7 +347,7 @@ function renderGoal(actual, forecast) {
   $('goal-bar').setAttribute('aria-label', text);
 }
 $('goal-input').addEventListener('input', (ev) => {
-  prefs.goal = Math.max(0, Math.round(Number(ev.target.value) || 0));
+  prefs.goal = Math.round(clampNum(ev.target.value));
   save(KEYS.prefs, prefs);
   renderMonth();
 });
@@ -447,6 +452,111 @@ function renderHistory() {
     }
   }
   $('history-empty').hidden = h.months.length > 0;
+}
+
+// ---- 年収チェックと収入計画 ----
+// 棒グラフの金額。long は広い画面用、short は狭い画面用（万円単位に丸める）
+const oku = (n) => `${Math.round(n / 1e8).toLocaleString('ja-JP')}億`;
+const manYen = (n) => (n >= 1e8 ? oku(n) : n >= 1000000 ? `${Math.round(n / 10000).toLocaleString('ja-JP')}万` : n >= 10000 ? `${(n / 10000).toFixed(1)}万` : n > 0 ? yen(n) : '');
+const manShort = (n) => (n >= 1e8 ? oku(n) : n >= 5000 ? `${Math.round(n / 10000).toLocaleString('ja-JP')}万` : n > 0 ? '1万未満' : '');
+const limitText = (w) => `${yen(w.amount)}${w.under ? '未満' : '以下'}`;
+
+function renderYear() {
+  $('year-h').textContent = `${viewYear}年の収入`;
+  const y = yearPlan(store.records, store.shifts, workplaces, viewYear, Date.now(), prefs.planMonthly);
+  $('year-actual').textContent = yen(y.actualGross);
+  $('year-forecast').textContent = yen(y.actualGross + y.pendingGross);
+  $('year-total').textContent = yen(y.actualGross + y.pendingGross + y.planned);
+
+  const sum = (m) => m.actualGross + m.pendingGross + m.planned;
+  const max = Math.max(1, ...y.months.map(sum));
+  const current = monthKey(Date.now());
+  $('year-chart').replaceChildren(...y.months.map((m) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    if (m.key === current) b.className = 'current';
+    const val = document.createElement('span');
+    val.className = 'val';
+    const long = document.createElement('span'); long.className = 'long'; long.textContent = manYen(sum(m));
+    const short = document.createElement('span'); short.className = 'short'; short.textContent = manShort(sum(m));
+    val.append(long, short);
+    const stack = document.createElement('span');
+    stack.className = 'stack'; stack.style.height = `${(sum(m) / max) * 78}%`;
+    for (const [cls, v] of [['rec', m.actualGross], ['pend', m.pendingGross], ['plan', m.planned]]) {
+      if (!v) continue;
+      const seg = document.createElement('span');
+      seg.className = `seg ${cls}`; seg.style.flex = `${v} 0 0`;
+      stack.append(seg);
+    }
+    const mon = document.createElement('span');
+    mon.className = 'mon'; mon.textContent = `${m.month}月`;
+    b.append(val, stack, mon);
+    b.setAttribute('aria-label',
+      `${viewYear}年${m.month}月 実績 ${yen(m.actualGross)}、シフト予定 ${yen(m.pendingGross)}、計画 ${yen(m.planned)}。この月を表示`);
+    b.addEventListener('click', () => {
+      viewMonth = m.key; renderCalendar(); renderMonth();
+      $('month-h').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return b;
+  }));
+
+  for (const [id, key] of [['plan-input', 'planMonthly'], ['limit-input', 'yearLimit']]) {
+    if (document.activeElement !== $(id)) $(id).value = prefs[key] || '';
+  }
+  const select = $('profile-select');
+  if (!select.options.length) select.replaceChildren(...PROFILES.map((p) => new Option(p.label, p.id)));
+  select.value = prefs.profile;
+
+  const set = wallsFor(viewYear, prefs.profile);
+  const walls = [...set.walls];
+  if (prefs.yearLimit > 0) {
+    walls.unshift({ id: 'custom', basis: 'tax', amount: prefs.yearLimit, title: '自分で決めた上限', effect: '' });
+  }
+  $('walls').replaceChildren(...walls.map((wall) => {
+    const w = wallStatus(wall, y.actual, y.forecast);
+    const li = document.createElement('li');
+    li.className = w.state;
+    const head = document.createElement('div');
+    head.className = 'head';
+    const title = document.createElement('span'); title.textContent = w.title;
+    const limit = document.createElement('span'); limit.textContent = limitText(w);
+    head.append(title, limit);
+    const bar = document.createElement('div');
+    bar.className = 'goal-bar';
+    const scale = Math.max(w.amount, w.forecast, 1);
+    const a = document.createElement('span'); a.className = 'a'; a.style.width = `${(w.actual / scale) * 100}%`;
+    const f = document.createElement('span'); f.className = 'f'; f.style.width = `${(Math.max(0, w.forecast - w.actual) / scale) * 100}%`;
+    bar.append(a, f);
+    const state = document.createElement('p');
+    state.className = 'state';
+    const basis = w.basis === 'social' ? '（交通費を含む）' : '';
+    state.textContent = w.state === 'over'
+      ? `実績 ${yen(w.actual)}${basis}で、すでに基準を超えています。`
+      : w.state === 'warn'
+        ? `実績 ${yen(w.actual)}${basis}。年間見込み ${yen(w.forecast)} だと ${yen(-w.remaining)} 超えます。`
+        : `実績 ${yen(w.actual)}${basis}。年間見込み ${yen(w.forecast)} で、基準まであと ${yen(w.remaining)} です。`;
+    li.append(head, bar, state);
+    if (w.effect) {
+      const effect = document.createElement('p');
+      effect.className = 'effect'; effect.textContent = w.effect;
+      li.append(effect);
+    }
+    return li;
+  }));
+  $('walls-label').textContent = set.label
+    ? `${set.label}で比べています。`
+    : `${viewYear}年の基準額には対応していません（令和7年分〜令和9年分に対応）。`;
+}
+$('year-prev').addEventListener('click', () => { viewYear -= 1; renderYear(); });
+$('year-next').addEventListener('click', () => { viewYear += 1; renderYear(); });
+$('profile-select').addEventListener('change', (ev) => {
+  prefs.profile = ev.target.value; save(KEYS.prefs, prefs); renderYear();
+});
+for (const [id, key] of [['plan-input', 'planMonthly'], ['limit-input', 'yearLimit']]) {
+  $(id).addEventListener('input', (ev) => {
+    prefs[key] = Math.round(clampNum(ev.target.value));
+    save(KEYS.prefs, prefs); renderYear();
+  });
 }
 
 // ---- 追加・編集（kind が 'bulk' のときは、まとめて追加するシフトの型を決める） ----
@@ -560,7 +670,7 @@ settingsForm.addEventListener('input', (ev) => {
   const w = editWp();
   if (el.type === 'checkbox') w[el.name] = el.checked;
   else if (el.name === 'payday') w.payday = Math.min(31, Math.max(0, Math.round(Number(el.value) || 0)));
-  else if (el.type === 'number') w[el.name] = Math.max(0, Number(el.value) || 0);
+  else if (el.type === 'number') w[el.name] = clampNum(el.value);
   else if (el.name === 'name') w.name = el.value.trim() || '勤務先';
   else w[el.name] = el.value;
   save(KEYS.workplaces, workplaces);
@@ -601,7 +711,7 @@ $('wp-delete').addEventListener('click', () => {
 });
 
 function renderAll() {
-  fillSettings(); renderCalendar(); renderMonth(); renderHistory(); renderDayDialog(); renderTimer();
+  fillSettings(); renderCalendar(); renderMonth(); renderYear(); renderHistory(); renderDayDialog(); renderTimer();
 }
 
 loadState();
