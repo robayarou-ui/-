@@ -1,0 +1,9 @@
+{
+  "name": "kyuryo-timer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "test": "TZ=Asia/Tokyo node --test"
+  }
+}
