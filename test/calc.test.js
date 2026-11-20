@@ -69,3 +69,41 @@ test('月の集計', () => {
   assert.equal(r.health, 9600);
   assert.equal(r.pension, 17568);
 });
+
+test('月の残業は同じ日の勤務時間を合算する', () => {
+  const first = { start: at('2026-11-20T09:00'), end: at('2026-11-20T14:00'), breakMin: 0 };
+  const second = { start: at('2026-11-20T16:00'), end: at('2026-11-20T21:00'), breakMin: 0 };
+  const sameDay = monthlySummary([first, second], S);
+  assert.equal(sameDay.overtime, 120);
+  assert.equal(sameDay.overtimePay, 600);
+  assert.equal(sameDay.base, 12000);
+  assert.equal(sameDay.wage, 12600);
+  assert.equal(sameDay.gross, 12600);
+  assert.equal(sameDay.days, 1);
+
+  const differentDays = monthlySummary([first, {
+    start: at('2026-11-21T16:00'), end: at('2026-11-21T21:00'), breakMin: 0,
+  }], S);
+  assert.equal(differentDays.overtime, 0);
+  assert.equal(differentDays.overtimePay, 0);
+  assert.equal(differentDays.wage, 12000);
+  assert.equal(differentDays.days, 2);
+
+  const off = monthlySummary([first, second], { ...S, overtimePremium: false });
+  assert.equal(off.overtime, 120);
+  assert.equal(off.overtimePay, 0);
+  assert.equal(off.wage, 12000);
+
+  const empty = monthlySummary([], S);
+  assert.equal(empty.overtime, 0);
+  assert.equal(empty.overtimePay, 0);
+  assert.equal(empty.wage, 0);
+
+  const single = { start: at('2026-11-20T09:00'), end: at('2026-11-20T19:01'), breakMin: 0 };
+  const fractionalWage = { ...S, hourlyWage: 1001 };
+  const summary = monthlySummary([single], fractionalWage);
+  const shift = shiftPay(single, fractionalWage);
+  assert.equal(summary.overtime, shift.overtime);
+  assert.equal(summary.overtimePay, shift.overtimePay);
+  assert.equal(summary.wage, shift.pay);
+});

@@ -120,12 +120,20 @@ export function dayKey(ms) {
 export function monthlySummary(records, settings) {
   const s = { ...DEFAULT_SETTINGS, ...settings };
   const t = { shifts: records.length, worked: 0, night: 0, overtime: 0, base: 0, nightPay: 0, overtimePay: 0, wage: 0 };
-  const days = new Set();
+  const days = new Map();
   for (const r of records) {
     const p = shiftPay(r, s);
-    t.worked += p.worked; t.night += p.night; t.overtime += p.overtime;
-    t.base += p.base; t.nightPay += p.nightPay; t.overtimePay += p.overtimePay; t.wage += p.pay;
-    days.add(dayKey(r.start));
+    t.worked += p.worked; t.night += p.night;
+    t.base += p.base; t.nightPay += p.nightPay; t.wage += p.pay - p.overtimePay;
+    const day = dayKey(r.start);
+    days.set(day, (days.get(day) || 0) + p.worked);
+  }
+  for (const worked of days.values()) {
+    const overtime = Math.max(0, worked - DAILY_LEGAL_MIN);
+    const overtimePay = s.overtimePremium ? Math.round(overtime * (s.hourlyWage / 60) * PREMIUM) : 0;
+    t.overtime += overtime;
+    t.overtimePay += overtimePay;
+    t.wage += overtimePay;
   }
   t.days = days.size;
   t.commute = Math.round(t.days * (s.commutePerDay || 0));
