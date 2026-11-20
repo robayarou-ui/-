@@ -160,7 +160,8 @@ test('バックアップの書き出しと読み込み', async () => {
   assert.throws(bad({ workplaces: [] }));
   assert.throws(bad({ workplaces: W, records: [{ ...rec, workplaceId: 'zzz' }] }));
   assert.throws(bad({ workplaces: W, records: [{ ...rec, start: 'x' }] }));
-  const fixed = parseBackup(JSON.stringify({ app: 'kyuryo-timer', data: { workplaces: [{ id: 'a', hourlyWage: -5, taxColumn: 'zz', color: 'red' }] } }));
+  const fixed = parseBackup(JSON.stringify({ app: 'kyuryo-timer', data: { workplaces: [{ id: 'a', hourlyWage: -5, commutePerDay: 1e308, taxColumn: 'zz', color: 'red' }] } }));
+  assert.equal(fixed.workplaces[0].commutePerDay, 0);
   assert.equal(fixed.workplaces[0].hourlyWage, DEFAULT_SETTINGS.hourlyWage);
   assert.equal(fixed.workplaces[0].taxColumn, 'kou');
   assert.equal(fixed.workplaces[0].color, '#1f6feb');

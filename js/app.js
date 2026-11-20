@@ -795,6 +795,10 @@ $('backup-file').addEventListener('change', async (ev) => {
   const file = ev.target.files[0];
   ev.target.value = '';
   if (!file) return;
+  if (timer) {
+    $('backup-status').textContent = '計測中は復元できません。先に退勤するか、計測を取り消してください。';
+    return;
+  }
   let data;
   try { data = parseBackup(await file.text()); } catch (e) {
     $('backup-status').textContent = `復元できませんでした: ${e.message}`;
@@ -803,8 +807,18 @@ $('backup-file').addEventListener('change', async (ev) => {
   const msg = `バックアップから復元しますか？\n今のデータ（勤務記録 ${store.records.length}件、シフト ${store.shifts.length}件）は、`
     + `バックアップの内容（勤務記録 ${data.records.length}件、シフト ${data.shifts.length}件、勤務先 ${data.workplaces.length}件）に置き換わります。`;
   if (!confirm(msg)) return;
-  save(KEYS.records, data.records); save(KEYS.shifts, data.shifts);
-  save(KEYS.workplaces, data.workplaces); save(KEYS.prefs, data.prefs);
+  // 途中で保存に失敗したら元のデータに戻す
+  const targets = ['records', 'shifts', 'workplaces', 'prefs'];
+  const before = targets.map((k) => localStorage.getItem(KEYS[k]));
+  try {
+    for (const k of targets) save(KEYS[k], data[k]);
+  } catch {
+    targets.forEach((k, i) => {
+      if (before[i] === null) localStorage.removeItem(KEYS[k]); else localStorage.setItem(KEYS[k], before[i]);
+    });
+    $('backup-status').textContent = '復元できませんでした: ブラウザの保存容量が足りません。データは変更していません。';
+    return;
+  }
   bulk = null;
   document.activeElement?.blur?.();
   loadState();

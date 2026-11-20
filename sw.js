@@ -1,6 +1,8 @@
 // オフラインでも開けるようにアプリのファイルを保存する。
 // オンラインのときは常に新しいファイルを取りに行き、失敗したら保存済みのものを返す。
-const CACHE = 'kyuryo-v1';
+// 同じオリジンの別アプリのキャッシュを消さないよう、このアプリのものは PREFIX で見分ける
+const PREFIX = 'kyuryo-';
+const CACHE = `${PREFIX}v1`;
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/app.js', 'js/calc.js', 'js/tax-table.js', 'js/walls.js', 'js/backup.js', 'js/notify.js',
@@ -14,7 +16,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });

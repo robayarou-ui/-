@@ -1,6 +1,7 @@
 import { DEFAULT_SETTINGS } from './calc.js';
 
 const APP = 'kyuryo-timer';
+const MAX_AMOUNT = 1e9;
 
 export function makeBackup({ records, shifts, workplaces, prefs }, nowMs = Date.now()) {
   return { app: APP, version: 1, exportedAt: new Date(nowMs).toISOString(), data: { records, shifts, workplaces, prefs } };
@@ -32,7 +33,7 @@ export function parseBackup(text) {
     out.payday = Number.isFinite(w.payday) ? Math.min(31, Math.max(0, Math.round(w.payday))) : 0;
     for (const [k, def] of Object.entries(DEFAULT_SETTINGS)) {
       const v = w[k];
-      if (typeof def === 'number') out[k] = Number.isFinite(v) && v >= 0 ? v : def;
+      if (typeof def === 'number') out[k] = Number.isFinite(v) && v >= 0 && v <= MAX_AMOUNT ? v : def;
       else if (typeof def === 'boolean') out[k] = typeof v === 'boolean' ? v : def;
       else out[k] = typeof v === 'string' ? v : def;
     }
