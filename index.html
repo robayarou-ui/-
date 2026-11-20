@@ -31,6 +31,11 @@
       <h2 id="month-h"></h2>
       <button id="month-next" aria-label="次の月">›</button>
     </div>
+    <div class="calendar" role="grid" aria-label="カレンダー">
+      <div class="cal-head" role="row"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
+      <div id="cal-body" class="cal-body"></div>
+    </div>
+    <p class="legend muted"><span class="dot rec"></span>勤務した日 <span class="dot shift"></span>シフト予定 ／ 日付を押すと確認・修正できます。</p>
     <div class="net" id="sum-net-box">
       <span>手取り（概算）</span>
       <strong id="sum-net">¥0</strong>
@@ -47,6 +52,7 @@
       </table>
     </div>
     <p id="sum-hours" class="muted"></p>
+    <p id="sum-forecast" class="muted"></p>
   </section>
 
   <section class="card" aria-labelledby="rec-h">
@@ -54,6 +60,7 @@
       <h2 id="rec-h">勤務記録</h2>
       <div>
         <button id="btn-add">手入力で追加</button>
+        <button id="btn-add-shift">シフトを追加</button>
         <button id="btn-csv">CSV出力</button>
       </div>
     </div>
@@ -64,6 +71,22 @@
       </table>
     </div>
     <p id="records-empty" class="muted">この月の記録はまだありません。</p>
+  </section>
+
+  <section class="card" aria-labelledby="hist-h">
+    <h2 id="hist-h">これまでの稼ぎ</h2>
+    <div class="totals">
+      <div><span>累計の支給額</span><strong id="hist-gross">¥0</strong></div>
+      <div><span>累計の手取り（概算）</span><strong id="hist-net">¥0</strong></div>
+      <div><span>累計の実働</span><strong id="hist-hours">0時間00分</strong></div>
+    </div>
+    <div class="table-wrap">
+      <table class="records history">
+        <thead><tr><th>期間</th><th>出勤</th><th>実働</th><th>支給額</th><th>差し引き</th><th>手取り</th></tr></thead>
+        <tbody id="history"></tbody>
+      </table>
+    </div>
+    <p id="history-empty" class="muted">記録がたまると、ここに月別・年別の金額が表示されます。</p>
   </section>
 
   <section class="card" aria-labelledby="set-h">
@@ -109,10 +132,25 @@
       <li>雇用保険料率の初期値は令和8年度の一般の事業（本人負担 0.5%）です。</li>
       <li>健康保険・厚生年金の「料率で概算」は支給額に料率を掛けた目安です。正確な額は標準報酬月額で決まるので、給与明細の金額が分かる場合は「毎月の金額を入力する」を使ってください。</li>
       <li>交通費は非課税として扱います。休憩は深夜以外の時間から先に差し引きます。</li>
+      <li>シフト予定は、その日に勤務記録がまだない分だけ「見込み」に含めます。</li>
+      <li>「これまでの稼ぎ」は現在の設定（時給や保険など）で全期間を計算し直した金額です。</li>
       <li>データはこのブラウザの中だけに保存されます。</li>
     </ul>
   </section>
 </main>
+
+<dialog id="day-dialog">
+  <h2 id="day-title"></h2>
+  <h3>勤務記録</h3>
+  <ul id="day-records" class="day-list"></ul>
+  <h3>シフト予定</h3>
+  <ul id="day-shifts" class="day-list"></ul>
+  <div class="buttons">
+    <button id="day-add-record">勤務記録を追加</button>
+    <button id="day-add-shift">シフトを追加</button>
+    <button id="day-close" class="primary">閉じる</button>
+  </div>
+</dialog>
 
 <dialog id="edit-dialog">
   <form method="dialog" id="edit-form">
